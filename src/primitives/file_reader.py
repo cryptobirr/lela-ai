@@ -1,7 +1,7 @@
 """
 FileReader primitive for reading JSON files.
 
-Green Phase Implementation - Minimum code to pass tests.
+Refactor Phase - Clean, maintainable implementation.
 """
 
 import json
@@ -10,6 +10,18 @@ from pathlib import Path
 
 class FileReader:
     """Reads JSON files and returns structured data."""
+
+    def _to_path(self, file_path: str) -> Path:
+        """
+        Convert string path to Path object.
+
+        Args:
+            file_path: String path to convert
+
+        Returns:
+            Path: Path object
+        """
+        return Path(file_path)
 
     def read(self, file_path: str) -> dict:
         """
@@ -25,7 +37,7 @@ class FileReader:
             FileNotFoundError: If file doesn't exist
             json.JSONDecodeError: If JSON is malformed
         """
-        path = Path(file_path)
+        path = self._to_path(file_path)
 
         if not path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
@@ -43,4 +55,4 @@ class FileReader:
         Returns:
             bool: True if file exists, False otherwise
         """
-        return Path(file_path).exists()
+        return self._to_path(file_path).exists()
