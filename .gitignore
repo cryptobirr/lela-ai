@@ -1,0 +1,25 @@
+# Development artifacts
+dev/
+
+# Environment
+.env
+.env.local
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyc
+.ruff_cache/
+.pytest_cache/
+build/
+dist/
+wheels/
+*.egg-info
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
