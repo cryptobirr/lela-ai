@@ -92,11 +92,7 @@ class FileWriter:
 
         # Write to temp file in same directory
         # Using same directory ensures atomic rename (same filesystem)
-        fd, temp_path = tempfile.mkstemp(
-            dir=path.parent,
-            suffix=".tmp",
-            prefix=f".{path.name}."
-        )
+        fd, temp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp", prefix=f".{path.name}.")
 
         try:
             # Write JSON to temp file
