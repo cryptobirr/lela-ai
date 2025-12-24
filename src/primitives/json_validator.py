@@ -5,11 +5,27 @@ Validates JSON data against schemas using jsonschema library.
 Provides predefined schemas for instructions, result, and feedback.
 """
 
-from jsonschema import validate, ValidationError, Draft7Validator
+from typing import Any
+
+from jsonschema import Draft7Validator
 
 
 class JSONValidator:
     """Validates JSON against schemas"""
+
+    @staticmethod
+    def _format_validation_error(error: Any) -> str:
+        """
+        Format a jsonschema validation error into a readable message
+
+        Args:
+            error: ValidationError from jsonschema
+
+        Returns:
+            str: Formatted error message with path and details
+        """
+        path = ".".join(str(p) for p in error.path) if error.path else "root"
+        return f"{path}: {error.message}"
 
     # Predefined schemas for pod communication
     INSTRUCTIONS_SCHEMA = {
@@ -73,48 +89,22 @@ class JSONValidator:
             return (True, [])
 
         # Convert validation errors to specific error messages
-        error_messages = []
-        for error in errors:
-            # Build a specific error message with path and details
-            path = ".".join(str(p) for p in error.path) if error.path else "root"
-            message = f"{path}: {error.message}"
-            error_messages.append(message)
-
+        error_messages = [self._format_validation_error(error) for error in errors]
         return (False, error_messages)
 
     def validate_instructions(self, data: dict) -> tuple[bool, list[str]]:
-        """
-        Validate instructions.json format
-
-        Args:
-            data: The instructions data to validate
-
-        Returns:
-            tuple[bool, list[str]]: (is_valid, error_messages)
-        """
+        """Validate instructions.json against predefined schema"""
         return self.validate(data, self.INSTRUCTIONS_SCHEMA)
 
     def validate_result(self, data: dict) -> tuple[bool, list[str]]:
-        """
-        Validate result.json format
-
-        Args:
-            data: The result data to validate
-
-        Returns:
-            tuple[bool, list[str]]: (is_valid, error_messages)
-        """
+        """Validate result.json against predefined schema"""
         return self.validate(data, self.RESULT_SCHEMA)
 
     def validate_feedback(self, data: dict) -> tuple[bool, list[str]]:
         """
-        Validate feedback.json format (handles both PASS and FAIL)
+        Validate feedback.json against predefined schema (PASS or FAIL)
 
-        Args:
-            data: The feedback data to validate
-
-        Returns:
-            tuple[bool, list[str]]: (is_valid, error_messages)
+        Automatically selects the appropriate schema based on status field.
         """
         # Check which schema to use based on status
         status = data.get("status")
