@@ -4,11 +4,9 @@ ConfigLoader Primitive
 Loads agent configuration from files with validation and environment variable substitution.
 """
 
-import json
 import os
 import re
-from pathlib import Path
-from typing import Any, Optional
+from typing import Optional, Union
 
 from src.primitives.file_reader import FileReader
 from src.primitives.json_validator import JSONValidator
@@ -16,6 +14,9 @@ from src.primitives.json_validator import JSONValidator
 
 class ConfigLoader:
     """Loads and validates agent configuration files"""
+
+    # Environment variable pattern: ${VAR_NAME}
+    ENV_VAR_PATTERN = r'\$\{([^}]+)\}'
 
     def __init__(self):
         self.file_reader = FileReader()
@@ -38,10 +39,7 @@ class ConfigLoader:
             ValueError: If config fails validation or env var is undefined
         """
         # Read the config file
-        try:
-            config = self.file_reader.read(config_path)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"JSON parsing failed for {config_path}: {e}")
+        config = self.file_reader.read(config_path)
 
         # Substitute environment variables
         config = self._substitute_env_vars(config)
@@ -50,11 +48,14 @@ class ConfigLoader:
         if schema:
             is_valid, error_messages = self.validator.validate(config, schema)
             if not is_valid:
+                # Report first validation error for clarity
                 raise ValueError(f"Config validation failed: {error_messages[0]}")
 
         return config
 
-    def _substitute_env_vars(self, data: Any) -> Any:
+    def _substitute_env_vars(
+        self, data: Union[dict, list, str, int, float, bool, None]
+    ) -> Union[dict, list, str, int, float, bool, None]:
         """
         Recursively substitute environment variables in config data
 
@@ -75,8 +76,7 @@ class ConfigLoader:
             return [self._substitute_env_vars(item) for item in data]
         elif isinstance(data, str):
             # Match ${VAR_NAME} pattern
-            pattern = r'\$\{([^}]+)\}'
-            matches = re.findall(pattern, data)
+            matches = re.findall(self.ENV_VAR_PATTERN, data)
 
             for var_name in matches:
                 if var_name not in os.environ:
