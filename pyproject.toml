@@ -3,7 +3,9 @@ name = "lela-ai"
 version = "0.1.0"
 description = "Composable agent harness with pod-based architecture for LLM-agnostic task orchestration"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "structlog>=25.5.0",
+]
 
 [dependency-groups]
 dev = [
