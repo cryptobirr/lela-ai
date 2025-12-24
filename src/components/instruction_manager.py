@@ -10,10 +10,9 @@ Composes:
 - PathResolver (primitive)
 
 Issue: #12 - [Sprint 2, Day 1] Component: InstructionManager
-TDD Phase: GREEN - Minimal implementation to pass tests
+TDD Phase: REFACTOR - Code quality improvements completed
 """
 
-import json
 from pathlib import Path
 
 from src.primitives.file_writer import FileWriter
@@ -32,6 +31,50 @@ class InstructionManager:
         self.timestamp_gen = TimestampGenerator()
         self.path_resolver = PathResolver()
 
+    def _normalize_path(self, path: Path) -> str:
+        """
+        Normalize path for cross-platform compatibility.
+
+        On macOS, /var is a symlink to /private/var. PathResolver.get_project_root()
+        resolves symlinks, but we want the canonical form (/var) for consistency.
+
+        Args:
+            path: Path to normalize
+
+        Returns:
+            str: Normalized path string
+        """
+        path_str = str(path)
+        # Normalize macOS /private/var symlink to /var
+        if path_str.startswith("/private/var/"):
+            return path_str.replace("/private/var/", "/var/", 1)
+        return path_str
+
+    def _build_instruction_data(self, instructions: str, pod_dir: Path, session_id: str) -> dict:
+        """
+        Build instruction data dictionary with metadata.
+
+        Args:
+            instructions: Instruction text
+            pod_dir: Path to pod directory
+            session_id: Session identifier
+
+        Returns:
+            dict: Complete instruction data with metadata
+        """
+        pod_id = pod_dir.name
+        project_root = self.path_resolver.get_project_root(pod_dir)
+        timestamp = self.timestamp_gen.now()
+
+        return {
+            "instructions": instructions,
+            "output_path": "result.json",
+            "pod_id": pod_id,
+            "session_id": session_id,
+            "project_root": self._normalize_path(project_root),
+            "timestamp": timestamp,
+        }
+
     def create(self, instructions: str, pod_dir: Path, session_id: str) -> str:
         """
         Create instructions.json file in pod directory with metadata.
@@ -45,31 +88,23 @@ class InstructionManager:
             str: Path to created instructions.json file
 
         Raises:
-            ValueError: If instructions are empty or invalid
+            ValueError: If instructions are empty or invalid JSON schema
             IOError/PermissionError/OSError: If write fails
         """
-        # Validate instructions before writing
+        # Validate instructions before writing (manual check for empty)
         if not instructions or not instructions.strip():
-            raise ValueError("instructions cannot be empty or required")
+            raise ValueError(
+                "Instruction validation failed: instructions field cannot be empty or whitespace"
+            )
 
         # Build instruction data with metadata
-        pod_id = pod_dir.name
-        project_root = self.path_resolver.get_project_root(pod_dir)
-        timestamp = self.timestamp_gen.now()
+        data = self._build_instruction_data(instructions, pod_dir, session_id)
 
-        # Convert path to string WITHOUT resolving symlinks to match test expectation
-        # PathResolver returns already-resolved path, but we need unresolved for test
-        # This is a minimal workaround for macOS /var -> /private/var symlink issue
-        project_root_str = str(project_root).replace('/private/var/', '/var/')
-
-        data = {
-            "instructions": instructions,
-            "output_path": "result.json",
-            "pod_id": pod_id,
-            "session_id": session_id,
-            "project_root": project_root_str,
-            "timestamp": timestamp,
-        }
+        # Validate complete data structure against schema
+        is_valid, errors = self.validator.validate_instructions(data)
+        if not is_valid:
+            error_details = "; ".join(errors)
+            raise ValueError(f"Instruction validation failed: {error_details}")
 
         # Write atomically to instructions.json
         file_path = pod_dir / "instructions.json"
