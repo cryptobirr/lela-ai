@@ -2,11 +2,13 @@
 LLMClient Primitive - Generic LLM API client (provider-agnostic)
 
 Issue: #5 - [Sprint 1, Day 2] Primitive: LLMClient
-Status: GREEN PHASE - Minimum implementation to pass tests
+Status: REFACTOR PHASE - Improving code quality while maintaining test coverage
 """
 
 import time
 from typing import Any
+
+import httpx
 
 
 # Exception hierarchy
@@ -39,6 +41,46 @@ class LLMClient:
 
     SUPPORTED_PROVIDERS = {"anthropic", "google", "openai", "ollama"}
 
+    def _parse_error_details(self, response: httpx.Response) -> tuple[str, str]:
+        """Extract error type and message from API response
+
+        Args:
+            response: HTTP response object
+
+        Returns:
+            Tuple of (error_type, error_message)
+        """
+        error_data = response.json().get("error", {})
+        error_type = error_data.get("type", "unknown")
+        error_message = error_data.get("message", "Unknown error")
+        return error_type, error_message
+
+    def _extract_response_text(self, response: httpx.Response) -> str:
+        """Extract text content from successful API response
+
+        Args:
+            response: HTTP response object
+
+        Returns:
+            Response text from LLM
+        """
+        response_data = response.json()
+        content = response_data.get("content", [])
+        if content and isinstance(content, list):
+            return content[0].get("text", "")
+        return ""
+
+    def _calculate_backoff_delay(self, attempt: int) -> float:
+        """Calculate exponential backoff delay
+
+        Args:
+            attempt: Current attempt number (1-indexed)
+
+        Returns:
+            Delay in seconds (2^(attempt-1))
+        """
+        return 2 ** (attempt - 1)
+
     def supports_provider(self, provider: str) -> bool:
         """Check if provider is supported
 
@@ -69,9 +111,6 @@ class LLMClient:
             TimeoutError: When request exceeds timeout threshold
             LLMAPIError: For other API failures
         """
-        import httpx
-
-        provider = config.get("provider")
         timeout = config.get("timeout", 30)
 
         try:
@@ -95,30 +134,17 @@ class LLMClient:
 
         # Handle error status codes
         if response.status_code == 429:
-            error_data = response.json().get("error", {})
-            raise RateLimitError(
-                f"Rate limit exceeded (429): {error_data.get('message', 'Too many requests')}"
-            )
+            error_type, error_message = self._parse_error_details(response)
+            raise RateLimitError(f"Rate limit exceeded (429): {error_message}")
 
         if response.status_code >= 400:
-            error_data = response.json().get("error", {})
-            error_type = error_data.get("type", "unknown")
-            error_message = error_data.get("message", "Unknown error")
-            raise LLMAPIError(
-                f"API error ({response.status_code}): {error_type} - {error_message}"
-            )
+            error_type, error_message = self._parse_error_details(response)
+            raise LLMAPIError(f"API error ({response.status_code}): {error_type} - {error_message}")
 
-        # Extract response text
-        response_data = response.json()
-        content = response_data.get("content", [])
-        if content and isinstance(content, list):
-            return content[0].get("text", "")
+        # Extract and return response text
+        return self._extract_response_text(response)
 
-        return ""
-
-    def call_with_retry(
-        self, prompt: str, config: dict[str, Any], retries: int = 3
-    ) -> str:
+    def call_with_retry(self, prompt: str, config: dict[str, Any], retries: int = 3) -> str:
         """Make LLM API call with retry logic (exponential backoff)
 
         Args:
@@ -143,8 +169,8 @@ class LLMClient:
                 if attempt >= retries:
                     raise  # Re-raise on last attempt
 
-                # Exponential backoff: 2^(attempt-1) seconds
-                backoff_delay = 2 ** (attempt - 1)
+                # Exponential backoff
+                backoff_delay = self._calculate_backoff_delay(attempt)
                 time.sleep(backoff_delay)
 
         # Should never reach here
