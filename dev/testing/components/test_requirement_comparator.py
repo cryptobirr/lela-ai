@@ -275,3 +275,48 @@ class TestRequirementComparatorEdgeCases:
         # Test only uppercase should PASS
         status, gaps = comparator.evaluate(instructions, "PASS")
         assert status == "PASS"
+
+    def test_evaluate_with_no_extractable_requirements(self, monkeypatch):
+        """When extract_requirements returns empty list, should return generic gap with result (line 101)."""
+        from unittest.mock import Mock
+
+        comparator = RequirementComparator()
+
+        # Mock extract_requirements to return empty list
+        mock_extract_requirements = Mock(return_value=[])
+        monkeypatch.setattr(comparator.gap_extractor, "extract_requirements", mock_extract_requirements)
+
+        # Use simple instruction (no colons, no parentheses, no "json" keyword)
+        instructions = "complete task"
+        result = "wrong answer"
+
+        status, gaps = comparator.evaluate(instructions, result)
+
+        assert status == "FAIL"
+        assert len(gaps) > 0
+        # Should include result value in gap message (covers line 101)
+        assert gaps[0] == "Incorrect result: wrong answer"
+
+    def test_evaluate_with_specific_non_missing_requirement_gaps(self, monkeypatch):
+        """When GapExtractor returns gaps without 'Missing requirement' prefix, should preserve them (line 114)."""
+        from unittest.mock import Mock
+
+        comparator = RequirementComparator()
+
+        # Mock gap_extractor.find_gaps to return a gap without "Missing requirement" prefix
+        mock_find_gaps = Mock(return_value=["Custom gap message without prefix"])
+        monkeypatch.setattr(comparator.gap_extractor, "find_gaps", mock_find_gaps)
+
+        # Mock extract_requirements to return non-empty list (so it reaches find_gaps call)
+        mock_extract_requirements = Mock(return_value=["some requirement"])
+        monkeypatch.setattr(comparator.gap_extractor, "extract_requirements", mock_extract_requirements)
+
+        instructions = "Calculate the answer"
+        result = "42"
+
+        status, gaps = comparator.evaluate(instructions, result)
+
+        assert status == "FAIL"
+        assert len(gaps) > 0
+        # Should preserve the custom gap message (covers line 114 - else branch)
+        assert gaps[0] == "Custom gap message without prefix"
