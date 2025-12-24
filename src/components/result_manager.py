@@ -5,12 +5,12 @@ Manages result file lifecycle (read, write, validate) with worker isolation.
 
 Composes:
 - FileReader (primitive)
-- AtomicFileWriter (primitive) -> Actually FileWriter
+- FileWriter (primitive, aliased as AtomicFileWriter)
 - JSONValidator (primitive)
-- PathResolver (primitive)
+- TimestampGenerator (primitive)
 
 Issue: #13 - [Sprint 2, Day 1] Component: ResultManager
-TDD Phase: GREEN - Minimal implementation to pass tests
+TDD Phase: REFACTOR - Code quality improvements applied
 """
 
 import json
@@ -27,6 +27,9 @@ AtomicFileWriter = FileWriter
 
 class ResultManager:
     """Manages result file lifecycle with worker isolation."""
+
+    RESULT_FILENAME = "result.json"
+    REQUIRED_FIELDS = ["result", "worker_id", "pod_id", "session_id", "timestamp"]
 
     def __init__(self):
         """Initialize ResultManager with required primitives."""
@@ -100,7 +103,7 @@ class ResultManager:
         }
 
         # Write atomically to result.json
-        file_path = worker_dir / "result.json"
+        file_path = worker_dir / self.RESULT_FILENAME
         self.writer.write(str(file_path), data)
 
         return str(file_path)
@@ -122,10 +125,9 @@ class ResultManager:
             return (False, ["File not found or invalid JSON"])
 
         # Check for required metadata fields
-        required_fields = ["result", "worker_id", "pod_id", "session_id", "timestamp"]
         errors = []
 
-        for field in required_fields:
+        for field in self.REQUIRED_FIELDS:
             if field not in data:
                 errors.append(f"Missing required field: {field}")
 
@@ -157,9 +159,9 @@ class ResultManager:
             if not worker_dir.is_dir():
                 continue
 
-            result_file = worker_dir / "result.json"
+            result_file = worker_dir / self.RESULT_FILENAME
 
-            # Skip workers without result.json
+            # Skip workers without result file
             if not result_file.exists():
                 continue
 
@@ -167,8 +169,8 @@ class ResultManager:
             try:
                 data = self.reader.read(str(result_file))
                 results.append(data)
-            except Exception:
-                # Skip workers with invalid result files
+            except (FileNotFoundError, json.JSONDecodeError, ValueError):
+                # Skip workers with invalid or unreadable result files
                 continue
 
         return results
