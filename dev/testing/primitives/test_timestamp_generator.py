@@ -16,6 +16,11 @@ from src.primitives.timestamp_generator import TimestampGenerator
 class TestTimestampGenerator:
     """Test suite for TimestampGenerator primitive - Issue #7"""
 
+    @staticmethod
+    def _parse_timestamp_to_datetime(timestamp: str) -> datetime:
+        """Helper method to parse ISO 8601 timestamp with 'Z' suffix"""
+        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
     def test_now_returns_valid_iso8601_timestamp(self):
         """
         Test 1: Generates valid ISO 8601 timestamps
@@ -36,7 +41,7 @@ class TestTimestampGenerator:
         ), f"Timestamp '{timestamp}' does not match ISO 8601 format"
 
         # Parse and validate it's a valid datetime
-        parsed_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        parsed_time = self._parse_timestamp_to_datetime(timestamp)
         assert isinstance(parsed_time, datetime), "Timestamp must be parseable as datetime"
 
         # Validate it's "now" (within ±10 seconds)
@@ -60,7 +65,7 @@ class TestTimestampGenerator:
             assert timestamp.endswith("Z"), f"Timestamp '{timestamp}' does not end with 'Z'"
 
             # Parse and verify UTC timezone
-            parsed_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            parsed_time = self._parse_timestamp_to_datetime(timestamp)
             assert (
                 parsed_time.tzinfo == timezone.utc
             ), f"Timestamp '{timestamp}' is not in UTC timezone"

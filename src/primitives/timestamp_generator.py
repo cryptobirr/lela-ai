@@ -10,6 +10,18 @@ class TimestampGenerator:
     """Generate and parse ISO 8601 timestamps"""
 
     @staticmethod
+    def _normalize_z_suffix(timestamp: str) -> str:
+        """Normalize 'Z' suffix to '+00:00' for datetime parsing
+
+        Args:
+            timestamp: ISO 8601 timestamp with 'Z' suffix
+
+        Returns:
+            str: Timestamp with '+00:00' instead of 'Z'
+        """
+        return timestamp.replace("Z", "+00:00")
+
+    @staticmethod
     def now() -> str:
         """Generate current UTC timestamp in ISO 8601 format
 
@@ -36,7 +48,7 @@ class TimestampGenerator:
 
         try:
             # Handle 'Z' suffix by replacing with '+00:00'
-            normalized = timestamp.replace("Z", "+00:00")
+            normalized = TimestampGenerator._normalize_z_suffix(timestamp)
             dt = datetime.fromisoformat(normalized)
 
             # Ensure timezone is UTC
