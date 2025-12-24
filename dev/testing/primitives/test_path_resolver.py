@@ -9,7 +9,6 @@ Test coverage: 7 tests mapping 1:1 to 7 acceptance criteria
 
 import re
 import uuid
-from pathlib import Path
 
 import pytest
 
@@ -141,8 +140,8 @@ class TestPathResolver:
 
         # Assert: Path structure matches expected pattern
         assert session_dir.parent.parent.parent == tmp_path
-        assert session_dir.parent.parent.name == "sessions"
-        assert session_dir.parent.parent.parent.name == ".agent-harness"
+        assert session_dir.parent.name == "sessions"
+        assert session_dir.parent.parent.name == ".agent-harness"
 
         # Assert: Directory name matches pattern: agent-<name>-session-<uuid>-<timestamp>
         dir_name = session_dir.name
@@ -226,9 +225,9 @@ class TestPathResolver:
         # Assert: Directory name matches pattern: worker-<id>-<timestamp>
         dir_name = worker_dir.name
         pattern = r"^worker-worker-001-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.*$"
-        assert re.match(
-            pattern, dir_name
-        ), f"Worker directory name '{dir_name}' doesn't match pattern"
+        assert re.match(pattern, dir_name), (
+            f"Worker directory name '{dir_name}' doesn't match pattern"
+        )
 
         # Assert: No collisions
         worker_dir_2 = resolver.create_worker_dir(pod_dir=pod_dir, worker_id=worker_id)
@@ -246,7 +245,7 @@ class TestPathResolver:
         resolver = PathResolver()
 
         # Act: Create session directory (should auto-create .gitignore)
-        session_dir = resolver.create_session_dir(project_root=tmp_path, agent_name="test")
+        _ = resolver.create_session_dir(project_root=tmp_path, agent_name="test")
 
         # Assert: .gitignore exists in .agent-harness/
         gitignore_path = tmp_path / ".agent-harness" / ".gitignore"
