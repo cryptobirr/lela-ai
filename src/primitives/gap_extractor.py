@@ -16,6 +16,12 @@ class GapExtractor:
     CRITICAL RULE: Only explicit "PASS" string = success, everything else = FAIL
     """
 
+    # Words to filter out when extracting key terms
+    _COMMON_WORDS = frozenset({'the', 'a', 'an', 'as', 'to', 'from', 'with', 'and', 'or', 'of'})
+
+    # Match threshold for requirement satisfaction (50% of key terms must match)
+    _MATCH_THRESHOLD = 0.5
+
     def is_pass(self, result: Optional[str]) -> bool:
         """
         Binary evaluation: Returns True ONLY for exact "PASS" string.
@@ -89,27 +95,37 @@ class GapExtractor:
             >>> len(reqs)
             3
         """
-        # Split instructions by newlines
         lines = instructions.strip().split('\n')
-
         requirements = []
 
         for line in lines:
-            # Remove leading/trailing whitespace
-            line = line.strip()
-
-            # Skip empty lines
-            if not line:
-                continue
-
-            # Remove numbered list prefix (1. 2. etc.)
-            cleaned_line = re.sub(r'^\d+\.\s*', '', line)
-
-            # Add to requirements if not empty
+            cleaned_line = self._clean_requirement_line(line)
             if cleaned_line:
                 requirements.append(cleaned_line)
 
         return requirements
+
+    def _clean_requirement_line(self, line: str) -> str:
+        """
+        Clean a single requirement line by removing whitespace and numbering.
+
+        Args:
+            line: Raw requirement line
+
+        Returns:
+            Cleaned requirement string (empty if line was only whitespace/numbering)
+        """
+        # Remove leading/trailing whitespace
+        line = line.strip()
+
+        # Return empty for blank lines
+        if not line:
+            return ""
+
+        # Remove numbered list prefix (1. 2. etc.)
+        cleaned = re.sub(r'^\d+\.\s*', '', line)
+
+        return cleaned
 
     def _extract_key_terms(self, requirement: str) -> list[str]:
         """
@@ -119,14 +135,11 @@ class GapExtractor:
             requirement: A single requirement string
 
         Returns:
-            List of key terms (lowercased words)
+            List of key terms (lowercased words, common words filtered)
         """
-        # Remove common words and extract key terms
-        common_words = {'the', 'a', 'an', 'as', 'to', 'from', 'with', 'and', 'or', 'of'}
-
         # Split into words, lowercase, filter common words
         words = requirement.lower().split()
-        key_terms = [word for word in words if word not in common_words]
+        key_terms = [word for word in words if word not in self._COMMON_WORDS]
 
         return key_terms
 
@@ -145,22 +158,36 @@ class GapExtractor:
             True if requirement appears satisfied, False otherwise
         """
         result_lower = result.lower()
+        requirement_lower = requirement.lower()
 
-        # Simple heuristic: check if key terms appear in result
-        # For "Return result as integer", check for both "integer" concept
-        if "integer" in requirement.lower():
-            # Check if result looks like an integer response
-            # If result is just prose (no number format), requirement not satisfied
-            if not any(char.isdigit() for char in result):
-                return False
-            # If result mentions "is" or "sum" but doesn't format as integer
-            if "is" in result_lower or "sum" in result_lower:
-                # Check if it's returned AS an integer (not just mentioned)
-                # If it's in a sentence, it's not formatted as integer
+        # Check type-specific requirements
+        if "integer" in requirement_lower:
+            if not self._has_integer_format(result, result_lower):
                 return False
 
-        # Check if most key terms appear in result
+        # Check if majority of key terms appear in result
         matches = sum(1 for term in key_terms if term in result_lower)
 
-        # If less than 50% of key terms match, requirement not satisfied
-        return matches >= len(key_terms) * 0.5
+        return matches >= len(key_terms) * self._MATCH_THRESHOLD
+
+    def _has_integer_format(self, result: str, result_lower: str) -> bool:
+        """
+        Check if result is formatted as an integer (not just mentioning a number).
+
+        Args:
+            result: Original result string
+            result_lower: Lowercased result string
+
+        Returns:
+            True if result appears to be formatted as an integer
+        """
+        # Result must contain at least one digit
+        if not any(char.isdigit() for char in result):
+            return False
+
+        # If result contains prose indicators, it's not formatted as integer
+        prose_indicators = ["is", "sum", "the"]
+        if any(indicator in result_lower for indicator in prose_indicators):
+            return False
+
+        return True
