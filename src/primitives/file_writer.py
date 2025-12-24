@@ -4,6 +4,7 @@ FileWriter primitive for writing JSON files.
 Green Phase - Minimum viable implementation to pass all tests.
 """
 
+import fcntl
 import json
 import os
 import tempfile
@@ -91,11 +92,7 @@ class FileWriter:
 
         # Write to temp file in same directory
         # Using same directory ensures atomic rename (same filesystem)
-        fd, temp_path = tempfile.mkstemp(
-            dir=path.parent,
-            suffix=".tmp",
-            prefix=f".{path.name}."
-        )
+        fd, temp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp", prefix=f".{path.name}.")
 
         try:
             # Write JSON to temp file
@@ -112,5 +109,46 @@ class FileWriter:
             except FileNotFoundError:
                 pass
             raise
+
+        return True
+
+    def write_with_lock(self, file_path: str, data: dict) -> bool:
+        """
+        Write dict to JSON file with file locking.
+
+        Acquires exclusive lock during write to prevent concurrent writes.
+        Creates parent directories if they don't exist.
+
+        Args:
+            file_path: Path to write the JSON file
+            data: Dictionary to serialize as JSON
+
+        Returns:
+            bool: True if write successful
+
+        Raises:
+            PermissionError: If cannot write to location
+        """
+        path = self._to_path(file_path)
+        self._ensure_parent_dirs(path)
+
+        # Open file in read-write mode to allow locking before truncation
+        # Use 'a+' to create file if doesn't exist, then we'll truncate after lock
+        with open(path, "a+", encoding="utf-8") as f:
+            try:
+                # Acquire exclusive lock (blocks until available)
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
+                # Truncate file AFTER acquiring lock to prevent corruption
+                f.seek(0)
+                f.truncate()
+
+                # Write JSON while lock is held
+                self._dump_json(data, f)
+
+            finally:
+                # Release lock (happens automatically when file closes,
+                # but explicit is better)
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
         return True

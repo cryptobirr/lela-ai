@@ -1,5 +1,5 @@
 # Development artifacts
-dev/
+dev/*
 !dev/testing/
 
 # Environment
