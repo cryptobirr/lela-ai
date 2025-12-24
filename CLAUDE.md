@@ -35,6 +35,12 @@ uv run ruff check --fix src/
 
 # Run tests
 uv run pytest dev/testing/
+
+# Run tests with coverage report
+uv run pytest dev/testing/ --cov=src --cov-report=term-missing --cov-report=html
+
+# Coverage must be 100% - build fails if below
+uv run pytest dev/testing/ --cov=src --cov-fail-under=100
 ```
 
 ## Coding Standards
@@ -43,6 +49,7 @@ uv run pytest dev/testing/
 - Formatter: ruff (auto on save in VS Code)
 - Linter: ruff (select rules: E, F, I, W, N)
 - Target: Python 3.11+
+- **Test Coverage: 100% required** (enforced via pytest-cov)
 
 ## Project Context
 

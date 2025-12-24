@@ -17,8 +17,22 @@ dev = [
     "ruff>=0.14.10",
     "pytest>=8.0.0",
     "pytest-mock>=3.14.0",
+    "pytest-cov>=6.0.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = "."
 testpaths = ["dev/testing"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/__pycache__/*", "*/.venv/*"]
+
+[tool.coverage.report]
+fail_under = 100
+precision = 2
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "dev/coverage-report"
