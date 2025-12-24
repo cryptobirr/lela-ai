@@ -9,3 +9,7 @@ dependencies = []
 dev = [
     "ruff>=0.14.10",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+testpaths = ["dev/testing"]
