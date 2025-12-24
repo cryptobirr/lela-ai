@@ -202,6 +202,44 @@ class TestResultManagerValidation:
         assert len(errors) > 0
         assert any("worker_id" in err for err in errors)
 
+    def test_validate_file_handles_file_not_found_error(self, tmp_path):
+        """Validate returns (False, error) for non-existent file.
+
+        Covers lines 124-125: FileNotFoundError exception handling
+        """
+        # Arrange
+        nonexistent_file = tmp_path / "workers" / "worker-999" / "result.json"
+        manager = ResultManager()
+
+        # Act
+        is_valid, errors = manager.validate_file(str(nonexistent_file))
+
+        # Assert
+        assert is_valid is False
+        assert len(errors) == 1
+        assert "File not found or invalid JSON" in errors[0]
+
+    def test_validate_file_handles_json_decode_error(self, tmp_path):
+        """Validate returns (False, error) for malformed JSON.
+
+        Covers lines 124-125: json.JSONDecodeError exception handling
+        """
+        # Arrange
+        worker_dir = tmp_path / "workers" / "worker-001"
+        worker_dir.mkdir(parents=True)
+        result_file = worker_dir / "result.json"
+        # Write invalid JSON
+        result_file.write_text("{invalid json content}")
+        manager = ResultManager()
+
+        # Act
+        is_valid, errors = manager.validate_file(str(result_file))
+
+        # Assert
+        assert is_valid is False
+        assert len(errors) == 1
+        assert "File not found or invalid JSON" in errors[0]
+
 
 class TestResultManagerAggregation:
     """Test aggregating results from multiple workers in a pod."""
@@ -269,6 +307,75 @@ class TestResultManagerAggregation:
 
         # Assert
         assert aggregated == []
+
+    def test_aggregate_skips_non_directory_items_in_workers_folder(self, tmp_path):
+        """Aggregate skips files in workers directory, only processes directories.
+
+        Covers line 160: continue when worker_dir.is_dir() is False
+        """
+        # Arrange
+        pod_dir = tmp_path / "pod-123"
+        workers_dir = pod_dir / "workers"
+        workers_dir.mkdir(parents=True)
+
+        # Create a valid worker directory with result
+        worker1_dir = workers_dir / "worker-001"
+        worker1_dir.mkdir()
+        result1_file = worker1_dir / "result.json"
+        result1_file.write_text(json.dumps({"result": "done", "worker_id": "worker-001"}))
+
+        # Create files (not directories) in workers directory - should be skipped
+        (workers_dir / "README.txt").write_text("This is a file, not a directory")
+        (workers_dir / "config.json").write_text("{}")
+
+        manager = ResultManager()
+
+        # Act
+        aggregated = manager.aggregate_worker_results(pod_dir)
+
+        # Assert - Should only return worker-001, skipping files
+        assert len(aggregated) == 1
+        assert aggregated[0]["worker_id"] == "worker-001"
+
+    def test_aggregate_skips_workers_with_malformed_json(self, tmp_path):
+        """Aggregate gracefully skips workers with invalid JSON in result files.
+
+        Covers lines 172, 174: except clause for json.JSONDecodeError and continue
+        """
+        # Arrange
+        pod_dir = tmp_path / "pod-123"
+        workers_dir = pod_dir / "workers"
+
+        # Worker 1 - valid result
+        worker1_dir = workers_dir / "worker-001"
+        worker1_dir.mkdir(parents=True)
+        (worker1_dir / "result.json").write_text(
+            json.dumps({"result": "success", "worker_id": "worker-001"})
+        )
+
+        # Worker 2 - malformed JSON (should be skipped)
+        worker2_dir = workers_dir / "worker-002"
+        worker2_dir.mkdir(parents=True)
+        (worker2_dir / "result.json").write_text("{invalid json")
+
+        # Worker 3 - valid result
+        worker3_dir = workers_dir / "worker-003"
+        worker3_dir.mkdir(parents=True)
+        (worker3_dir / "result.json").write_text(
+            json.dumps({"result": "done", "worker_id": "worker-003"})
+        )
+
+        manager = ResultManager()
+
+        # Act
+        aggregated = manager.aggregate_worker_results(pod_dir)
+
+        # Assert - Should return 2 results, skipping worker-002 with malformed JSON
+        assert len(aggregated) == 2
+        worker_ids = [r["worker_id"] for r in aggregated]
+        assert "worker-001" in worker_ids
+        assert "worker-003" in worker_ids
+        assert "worker-002" not in worker_ids
 
 
 class TestResultManagerConcurrency:
