@@ -23,7 +23,19 @@ class FeedbackManager:
         """Initialize FeedbackManager with required primitives"""
         self.file_writer = FileWriter()
         self.validator = JSONValidator()
-        self.timestamp_gen = TimestampGenerator()
+        self.timestamp_generator = TimestampGenerator()
+
+    def _create_base_feedback(self, pod_id: str) -> dict:
+        """
+        Create base feedback dictionary with common fields.
+
+        Args:
+            pod_id: Pod identifier
+
+        Returns:
+            dict: Base feedback with timestamp and pod_id
+        """
+        return {"timestamp": self.timestamp_generator.now(), "pod_id": pod_id}
 
     def write_pass(self, result: str, attempts: int, pod_dir: Path, pod_id: str) -> str:
         """
@@ -38,13 +50,8 @@ class FeedbackManager:
         Returns:
             str: Path to written feedback.json file
         """
-        data = {
-            "status": "PASS",
-            "result": result,
-            "attempts": attempts,
-            "timestamp": self.timestamp_gen.now(),
-            "pod_id": pod_id,
-        }
+        data = self._create_base_feedback(pod_id)
+        data.update({"status": "PASS", "result": result, "attempts": attempts})
 
         return self._write_feedback(data, pod_dir)
 
@@ -61,13 +68,8 @@ class FeedbackManager:
         Returns:
             str: Path to written feedback.json file
         """
-        data = {
-            "status": "FAIL",
-            "gaps": gaps,
-            "attempt": attempt,
-            "timestamp": self.timestamp_gen.now(),
-            "pod_id": pod_id,
-        }
+        data = self._create_base_feedback(pod_id)
+        data.update({"status": "FAIL", "gaps": gaps, "attempt": attempt})
 
         return self._write_feedback(data, pod_dir)
 
@@ -85,13 +87,14 @@ class FeedbackManager:
         Raises:
             ValueError: If validation fails
         """
-        # Validate before writing
+        # Validate schema before writing to prevent invalid data persistence
         is_valid, errors = self.validator.validate_feedback(data)
         if not is_valid:
-            raise ValueError(f"Feedback validation failed: {', '.join(errors)}")
+            error_msg = ", ".join(errors)
+            raise ValueError(f"Feedback validation failed: {error_msg}")
 
-        # Write atomically to pod directory
-        feedback_path = str(pod_dir / "feedback.json")
-        self.file_writer.write_atomic(feedback_path, data)
+        # Write atomically to prevent partial file visibility during write
+        feedback_file_path = str(pod_dir / "feedback.json")
+        self.file_writer.write_atomic(feedback_file_path, data)
 
-        return feedback_path
+        return feedback_file_path
