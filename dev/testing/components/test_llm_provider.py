@@ -724,3 +724,48 @@ class TestLLMProvider:
         call_config = mock_llm_call.call_args[1]["config"]
         assert "api_key" in call_config, "API key should be resolved"
         # Note: exact key value may be transformed, but should be derived from environment
+
+    def test_generate_raises_error_when_config_path_missing(self, mocker):
+        """
+        AC7: generate() raises ValueError when config_path is missing
+
+        Covers line 94: Missing required parameter 'config_path' validation
+        """
+        from src.components.llm_provider import LLMProvider
+
+        mock_logger = Mock()
+        mocker.patch("src.primitives.logger.Logger", return_value=mock_logger)
+
+        provider = LLMProvider()
+
+        # Act & Assert: Should raise ValueError when config_path is not provided
+        with pytest.raises(ValueError, match="config_path"):
+            provider.generate(prompt="Test", provider_config={})
+
+    def test_generate_raises_error_when_api_key_env_not_defined(self, temp_config_dir, mocker):
+        """
+        AC8: generate() raises ValueError when API key environment variable is not defined
+
+        Covers line 111: Environment variable not defined validation
+        """
+        from src.components.llm_provider import LLMProvider
+
+        config = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4",
+            "api_key_env": "UNDEFINED_API_KEY_ENV_VAR",
+        }
+        config_path = temp_config_dir / "no_env_config.json"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+
+        # Clear environment to ensure UNDEFINED_API_KEY_ENV_VAR doesn't exist
+        mocker.patch.dict("os.environ", {}, clear=True)
+
+        mock_logger = Mock()
+        mocker.patch("src.primitives.logger.Logger", return_value=mock_logger)
+
+        provider = LLMProvider()
+
+        # Act & Assert: Should raise ValueError when environment variable not defined
+        with pytest.raises(ValueError, match="UNDEFINED_API_KEY_ENV_VAR"):
+            provider.generate(prompt="Test", provider_config={"config_path": str(config_path)})
