@@ -5,11 +5,18 @@ description = "Composable agent harness with pod-based architecture for LLM-agno
 requires-python = ">=3.11"
 dependencies = [
     "structlog>=25.5.0",
+    "anthropic>=0.40.0",
+    "google-generativeai>=0.8.0",
+    "openai>=1.0.0",
+    "httpx>=0.25.0",
+    "jsonschema>=4.0.0",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.14.10",
+    "pytest>=8.0.0",
+    "pytest-mock>=3.14.0",
 ]
 
 [tool.pytest.ini_options]
