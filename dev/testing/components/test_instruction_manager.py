@@ -266,3 +266,51 @@ class TestInstructionManager:
         assert data_b["session_id"] == "session-b"
         assert data_a["pod_id"] == "pod-a"
         assert data_b["pod_id"] == "pod-b"
+
+    def test_normalize_path_handles_non_private_var_paths(self, pod_dir):
+        """
+        Test _normalize_path() returns unchanged path for non-macOS /private/var paths.
+
+        Covers line 51: return path_str (the non-/private/var/ code path)
+        """
+        # Arrange
+        from src.components.instruction_manager import InstructionManager
+
+        manager = InstructionManager()
+
+        # Act - Test various paths that don't start with /private/var/
+        regular_path = Path("/Users/test/project")
+        normalized = manager._normalize_path(regular_path)
+
+        # Assert - Should return unchanged
+        assert normalized == "/Users/test/project"
+
+        # Additional test cases
+        assert manager._normalize_path(Path("/tmp/test")) == "/tmp/test"
+        assert manager._normalize_path(Path("/home/user")) == "/home/user"
+
+    def test_create_with_invalid_json_schema_raises_detailed_error(self, pod_dir):
+        """
+        Test create() with data that fails JSONValidator schema validation.
+
+        Covers lines 106-107: validation failure error path with error_details
+        """
+        # Arrange
+        from src.components.instruction_manager import InstructionManager
+        from unittest.mock import patch
+
+        manager = InstructionManager()
+
+        # Mock validator to return validation failure with multiple errors
+        with patch.object(manager.validator, "validate_instructions") as mock_validate:
+            mock_validate.return_value = (False, ["Missing field: foo", "Invalid type: bar"])
+
+            # Act & Assert - Should raise ValueError with joined error details
+            with pytest.raises(
+                ValueError, match="Instruction validation failed:.*Missing field: foo.*Invalid type: bar"
+            ):
+                manager.create(
+                    instructions="Valid text",
+                    pod_dir=pod_dir,
+                    session_id="test-session",
+                )
