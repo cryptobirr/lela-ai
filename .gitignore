@@ -18,6 +18,12 @@ dist/
 wheels/
 *.egg-info
 
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+dev/coverage-report/
+
 # IDE
 .vscode/
 .idea/

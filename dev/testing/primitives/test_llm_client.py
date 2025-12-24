@@ -213,3 +213,81 @@ class TestLLMClient:
         # Should NOT be generic message
         assert error_message != "api failed"
         assert error_message != "error occurred"
+
+    def test_call_handles_empty_content_array(self, mocker):
+        """
+        Verify call() handles empty content array gracefully
+
+        Tests edge case when API returns empty content array
+        """
+        # Setup: Mock response with empty content array
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "content": []  # Empty array
+        }
+
+        mocker.patch("httpx.post", return_value=mock_response)
+
+        # Action: Call LLM API
+        from src.primitives.llm_client import LLMClient
+        client = LLMClient()
+        result = client.call(
+            prompt="Test",
+            config={"provider": "anthropic", "api_key": "test-key"}
+        )
+
+        # Expected: Returns empty string (not crash)
+        assert result == ""
+
+    def test_call_with_retry_raises_on_exhausted_retries(self, mocker):
+        """
+        Verify call_with_retry() raises RateLimitError after all retries fail
+
+        Tests that retry exhaustion raises error (not silent failure)
+        """
+        # Setup: Mock all responses to return 429
+        mock_response = Mock()
+        mock_response.status_code = 429
+        mock_response.json.return_value = {
+            "error": {"type": "rate_limit_error", "message": "Rate limit exceeded"}
+        }
+
+        mocker.patch("httpx.post", return_value=mock_response)
+        mocker.patch("time.sleep")  # Mock sleep to speed up test
+
+        # Action & Expected: Should raise RateLimitError after 3 attempts
+        from src.primitives.llm_client import LLMClient, RateLimitError
+        client = LLMClient()
+
+        with pytest.raises(RateLimitError):
+            client.call_with_retry(
+                prompt="Test",
+                config={"provider": "anthropic", "api_key": "test-key"},
+                retries=3
+            )
+
+    def test_call_with_retry_handles_zero_retries(self, mocker):
+        """
+        Verify call_with_retry() raises immediately when retries=0
+
+        Tests edge case of zero retries configuration
+        """
+        # Setup: Mock doesn't matter since loop won't run
+        mock_response = Mock()
+        mock_response.status_code = 429
+        mock_response.json.return_value = {
+            "error": {"type": "rate_limit_error", "message": "Rate limit"}
+        }
+        mocker.patch("httpx.post", return_value=mock_response)
+
+        # Action & Expected: Should raise immediately
+        from src.primitives.llm_client import LLMClient, RateLimitError
+        client = LLMClient()
+
+        with pytest.raises(RateLimitError, match="All retry attempts exhausted"):
+            client.call_with_retry(
+                prompt="Test",
+                config={"provider": "anthropic", "api_key": "test-key"},
+                retries=0  # Zero retries
+            )
