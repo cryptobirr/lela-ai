@@ -25,6 +25,25 @@ class FileWriter:
         """
         return Path(file_path)
 
+    def _ensure_parent_dirs(self, path: Path) -> None:
+        """
+        Ensure parent directories exist.
+
+        Args:
+            path: File path whose parent directories should exist
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _dump_json(self, data: dict, file_handle) -> None:
+        """
+        Serialize dict to JSON and write to file handle.
+
+        Args:
+            data: Dictionary to serialize
+            file_handle: Open file handle to write to
+        """
+        json.dump(data, file_handle, ensure_ascii=False, indent=2)
+
     def write(self, file_path: str, data: dict) -> bool:
         """
         Write dict to JSON file.
@@ -42,13 +61,11 @@ class FileWriter:
             PermissionError: If cannot write to location
         """
         path = self._to_path(file_path)
-
-        # Create parent directories if needed
-        path.parent.mkdir(parents=True, exist_ok=True)
+        self._ensure_parent_dirs(path)
 
         # Write JSON with UTF-8 encoding
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            self._dump_json(data, f)
 
         return True
 
@@ -70,9 +87,7 @@ class FileWriter:
             PermissionError: If cannot write to location
         """
         path = self._to_path(file_path)
-
-        # Create parent directories if needed
-        path.parent.mkdir(parents=True, exist_ok=True)
+        self._ensure_parent_dirs(path)
 
         # Write to temp file in same directory
         # Using same directory ensures atomic rename (same filesystem)
@@ -85,7 +100,7 @@ class FileWriter:
         try:
             # Write JSON to temp file
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                self._dump_json(data, f)
 
             # Atomic rename
             os.rename(temp_path, path)
