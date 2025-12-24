@@ -16,7 +16,7 @@ class ConfigLoader:
     """Loads and validates agent configuration files"""
 
     # Environment variable pattern: ${VAR_NAME}
-    ENV_VAR_PATTERN = r'\$\{([^}]+)\}'
+    ENV_VAR_PATTERN = r"\$\{([^}]+)\}"
 
     def __init__(self):
         self.file_reader = FileReader()
@@ -80,9 +80,7 @@ class ConfigLoader:
 
             for var_name in matches:
                 if var_name not in os.environ:
-                    raise ValueError(
-                        f"Environment variable '{var_name}' is not defined"
-                    )
+                    raise ValueError(f"Environment variable '{var_name}' is not defined")
                 data = data.replace(f"${{{var_name}}}", os.environ[var_name])
 
             return data

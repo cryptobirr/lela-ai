@@ -162,6 +162,40 @@ class TestWriteAtomic:
         temp_files = list(temp_dir.glob("*.tmp"))
         assert len(temp_files) == 0, "Temp files cleaned up after error"
 
+    # TC2.4: Handles already-deleted temp file on error
+    def test_write_atomic_handles_already_deleted_temp_file(self, writer, temp_dir, monkeypatch):
+        """Verify graceful handling when temp file already deleted during cleanup."""
+        target_file = temp_dir / "test.json"
+        test_data = {"key": "value"}
+
+        # Force exception during rename
+        def failing_rename(*args, **kwargs):
+            raise RuntimeError("Simulated rename failure")
+
+        monkeypatch.setattr(os, "rename", failing_rename)
+
+        # Force os.unlink to raise FileNotFoundError (temp file already deleted)
+        original_unlink = os.unlink
+        unlink_call_count = [0]
+
+        def failing_unlink(path):
+            unlink_call_count[0] += 1
+            if unlink_call_count[0] == 1:
+                # First call: temp file already deleted
+                raise FileNotFoundError(f"File not found: {path}")
+            else:
+                # Subsequent calls: normal behavior
+                return original_unlink(path)
+
+        monkeypatch.setattr(os, "unlink", failing_unlink)
+
+        # Act & Assert - Should handle FileNotFoundError gracefully
+        with pytest.raises(RuntimeError, match="Simulated rename failure"):
+            writer.write_atomic(str(target_file), test_data)
+
+        # Verify unlink was called (even though it raised FileNotFoundError)
+        assert unlink_call_count[0] >= 1, "os.unlink should have been called"
+
     # TC3.1: Parent directory creation
     def test_write_atomic_creates_parent_dirs(self, writer, temp_dir):
         """Verify parent directories created if don't exist."""
@@ -421,3 +455,51 @@ class TestIntegration:
         with open(target_file, "r", encoding="utf-8") as f:
             content = json.load(f)
         assert content == {"method": "atomic", "iteration": 3}
+
+
+class TestBasicWrite:
+    """Test basic write() method for standard file operations."""
+
+    @pytest.fixture
+    def writer(self):
+        """Create FileWriter instance for tests."""
+        return FileWriter()
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create temporary directory for test files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield Path(tmpdir)
+
+    def test_write_succeeds_with_valid_data(self, writer, temp_dir):
+        """Verify write() successfully writes JSON file."""
+        target_file = temp_dir / "test.json"
+        test_data = {"key": "value", "number": 42}
+
+        # Act
+        result = writer.write(str(target_file), test_data)
+
+        # Assert
+        assert result is True
+        assert target_file.exists()
+        with open(target_file, "r", encoding="utf-8") as f:
+            content = json.load(f)
+        assert content == test_data
+
+    def test_write_handles_permission_error(self, writer, temp_dir):
+        """Verify write() raises PermissionError when cannot write."""
+        # Create read-only directory
+        readonly_dir = temp_dir / "readonly"
+        readonly_dir.mkdir()
+        readonly_dir.chmod(0o444)  # Read-only
+
+        target_file = readonly_dir / "test.json"
+        test_data = {"key": "value"}
+
+        try:
+            # Act & Assert
+            with pytest.raises(PermissionError):
+                writer.write(str(target_file), test_data)
+        finally:
+            # Cleanup: restore permissions
+            readonly_dir.chmod(0o755)

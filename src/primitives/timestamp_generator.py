@@ -53,7 +53,7 @@ class TimestampGenerator:
 
             # Ensure timezone is UTC
             if dt.tzinfo != timezone.utc:
-                raise ValueError(f"Invalid timestamp format: timezone is not UTC")
+                raise ValueError("Invalid timestamp format: timezone is not UTC")
 
             return dt
         except (ValueError, AttributeError) as e:
