@@ -30,11 +30,8 @@ class JSONValidator:
     # Predefined schemas for pod communication
     INSTRUCTIONS_SCHEMA = {
         "type": "object",
-        "properties": {
-            "instructions": {"type": "string"},
-            "output_path": {"type": "string"}
-        },
-        "required": ["instructions", "output_path"]
+        "properties": {"instructions": {"type": "string"}, "output_path": {"type": "string"}},
+        "required": ["instructions", "output_path"],
     }
 
     RESULT_SCHEMA = {
@@ -42,7 +39,7 @@ class JSONValidator:
         "properties": {
             "result": {}  # Result can be any type
         },
-        "required": ["result"]
+        "required": ["result"],
     }
 
     FEEDBACK_PASS_SCHEMA = {
@@ -50,23 +47,19 @@ class JSONValidator:
         "properties": {
             "status": {"type": "string", "enum": ["PASS"]},
             "result": {},
-            "attempts": {"type": "integer"}
+            "attempts": {"type": "integer"},
         },
-        "required": ["status", "result", "attempts"]
+        "required": ["status", "result", "attempts"],
     }
 
     FEEDBACK_FAIL_SCHEMA = {
         "type": "object",
         "properties": {
             "status": {"type": "string", "enum": ["FAIL"]},
-            "gaps": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": 1
-            },
-            "attempt": {"type": "integer"}
+            "gaps": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+            "attempt": {"type": "integer"},
         },
-        "required": ["status", "gaps", "attempt"]
+        "required": ["status", "gaps", "attempt"],
     }
 
     def validate(self, data: dict, schema: dict) -> tuple[bool, list[str]]:

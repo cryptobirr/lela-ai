@@ -17,7 +17,7 @@ class GapExtractor:
     """
 
     # Words to filter out when extracting key terms
-    _COMMON_WORDS = frozenset({'the', 'a', 'an', 'as', 'to', 'from', 'with', 'and', 'or', 'of'})
+    _COMMON_WORDS = frozenset({"the", "a", "an", "as", "to", "from", "with", "and", "or", "of"})
 
     # Match threshold for requirement satisfaction (50% of key terms must match)
     _MATCH_THRESHOLD = 0.5
@@ -95,7 +95,7 @@ class GapExtractor:
             >>> len(reqs)
             3
         """
-        lines = instructions.strip().split('\n')
+        lines = instructions.strip().split("\n")
         requirements = []
 
         for line in lines:
@@ -123,7 +123,7 @@ class GapExtractor:
             return ""
 
         # Remove numbered list prefix (1. 2. etc.)
-        cleaned = re.sub(r'^\d+\.\s*', '', line)
+        cleaned = re.sub(r"^\d+\.\s*", "", line)
 
         return cleaned
 
@@ -143,9 +143,7 @@ class GapExtractor:
 
         return key_terms
 
-    def _requirement_satisfied(
-        self, requirement: str, key_terms: list[str], result: str
-    ) -> bool:
+    def _requirement_satisfied(self, requirement: str, key_terms: list[str], result: str) -> bool:
         """
         Check if a requirement is satisfied by the result.
 

@@ -122,3 +122,27 @@ class TestTimestampGenerator:
             assert "invalid" in error_message or "format" in error_message, (
                 f"Error message should mention 'invalid' or 'format', got: {exc_info.value}"
             )
+
+    def test_parse_rejects_non_utc_timezone(self):
+        """
+        Verify parse() raises ValueError for non-UTC timezones
+
+        Tests that only UTC timezone is accepted
+        """
+        # Setup: Define timestamps with non-UTC timezones
+        non_utc_timestamps = [
+            "2025-12-23T15:45:30+05:00",  # UTC+5
+            "2025-12-23T15:45:30-08:00",  # UTC-8
+            "2025-12-23T15:45:30+01:00",  # UTC+1
+        ]
+
+        # Action & Expected: Each non-UTC timestamp raises ValueError
+        for timestamp in non_utc_timestamps:
+            with pytest.raises(ValueError) as exc_info:
+                TimestampGenerator.parse(timestamp)
+
+            # Verify error message mentions timezone/UTC
+            error_message = str(exc_info.value).lower()
+            assert "utc" in error_message or "timezone" in error_message, (
+                f"Error should mention UTC/timezone, got: {exc_info.value}"
+            )
