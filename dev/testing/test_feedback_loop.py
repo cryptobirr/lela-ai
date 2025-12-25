@@ -82,14 +82,14 @@ class TestFeedbackLoopExecution:
             "output_path": "result.json"
         }))
 
-        # Mock worker to produce correct result
-        with patch('src.features.feedback_loop.WorkerExecution') as MockWorker:
+        # Mock both worker and supervisor
+        with patch('src.features.feedback_loop.WorkerExecution') as MockWorker, \
+             patch('src.features.feedback_loop.SupervisorEvaluation') as MockSupervisor:
             mock_worker = MockWorker.return_value
-            mock_worker.read_instructions.return_value = {
-                "instructions": "Return the number 42",
-                "output_path": "result.json"
-            }
             mock_worker.execute.return_value = {"result": "42"}
+
+            mock_supervisor = MockSupervisor.return_value
+            mock_supervisor.evaluate.return_value = "PASS"
 
             # Execute loop
             loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
@@ -122,16 +122,31 @@ class TestFeedbackLoopExecution:
             "output_path": "result.json"
         }))
 
-        # Mock worker: fail first, pass second
-        with patch('src.features.feedback_loop.WorkerExecution') as MockWorker:
+        # Mock both worker and supervisor
+        with patch('src.features.feedback_loop.WorkerExecution') as MockWorker, \
+             patch('src.features.feedback_loop.SupervisorEvaluation') as MockSupervisor:
             mock_worker = MockWorker.return_value
             mock_worker.execute.side_effect = [
                 {"result": "24"},  # Wrong on first attempt
-                {"result": "42"}   # Correct on retry
             ]
+            mock_worker.execute_with_feedback.return_value = {"result": "42"}  # Correct on retry
+
+            mock_supervisor = MockSupervisor.return_value
+            # FAIL on first attempt, PASS on second
+            mock_supervisor.evaluate.side_effect = ["FAIL", "PASS"]
+            mock_supervisor.write_feedback.return_value = None
 
             # Execute loop
             loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+
+            # Write feedback file for retry (simulate supervisor writing gaps)
+            feedback_file = tmp_path / "feedback.json"
+            feedback_file.write_text(json.dumps({
+                "status": "FAIL",
+                "gaps": ["Result was 24, expected 42"],
+                "attempt": 1
+            }))
+
             result = loop.run()
 
             # Verify: PASS on second attempt
@@ -236,13 +251,15 @@ class TestFeedbackLoopGapsContext:
 
         with patch('src.features.feedback_loop.WorkerExecution') as MockWorker:
             mock_worker = MockWorker.return_value
+            # Return JSON-serializable result
+            mock_worker.execute_with_feedback.return_value = {"result": "valid"}
 
             loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
             loop._execute_worker_with_feedback()
 
             # Verify worker was called with feedback context
             # (exact implementation depends on how gaps are passed to worker)
-            assert mock_worker.execute_with_feedback.called or mock_worker.run.called
+            assert mock_worker.execute_with_feedback.called or mock_worker.execute.called
 
 
 class TestFeedbackLoopHistory:
@@ -252,15 +269,30 @@ class TestFeedbackLoopHistory:
         """FeedbackLoop should track number of iterations"""
         from src.features.feedback_loop import FeedbackLoop
 
-        loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+        # Setup instructions
+        instructions_file = tmp_path / "instructions.json"
+        instructions_file.write_text(json.dumps({
+            "instructions": "Test instructions",
+            "output_path": "result.json"
+        }))
 
-        # Initial state
-        assert loop.get_iteration_count() == 0
+        # Create loop with mocked components
+        with patch('src.features.feedback_loop.WorkerExecution') as MockWorker, \
+             patch('src.features.feedback_loop.SupervisorEvaluation') as MockSupervisor:
+            mock_worker = MockWorker.return_value
+            mock_worker.execute.return_value = {"result": "test"}
 
-        # After running (mocked)
-        with patch.object(loop, '_run_single_iteration'):
+            mock_supervisor = MockSupervisor.return_value
+            mock_supervisor.evaluate.return_value = "PASS"
+
+            loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+
+            # Initial state
+            assert loop.get_iteration_count() == 0
+
+            # After running
             loop.run()
-            assert loop.get_iteration_count() > 0
+            assert loop.get_iteration_count() == 1
 
     def test_loop_tracks_attempt_history(self, tmp_path):
         """FeedbackLoop should maintain history of all attempts"""
@@ -486,3 +518,75 @@ class TestFeedbackLoopIntegration:
                 # Verify file-based artifacts exist
                 assert (tmp_path / "instructions.json").exists()
                 # Result and feedback files depend on execution outcome
+
+
+class TestFeedbackLoopEdgeCases:
+    """Test edge cases for missing file paths"""
+
+    def test_read_gaps_when_no_feedback_file(self, tmp_path):
+        """_read_gaps should return empty list when feedback.json doesn't exist"""
+        from src.features.feedback_loop import FeedbackLoop
+
+        loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+
+        # No feedback file exists
+        gaps = loop._read_gaps()
+        assert gaps == []
+
+    def test_read_gaps_when_feedback_is_pass(self, tmp_path):
+        """_read_gaps should return empty list when feedback status is PASS"""
+        from src.features.feedback_loop import FeedbackLoop
+
+        # Create PASS feedback
+        feedback_file = tmp_path / "feedback.json"
+        feedback_file.write_text(json.dumps({
+            "status": "PASS",
+            "attempt": 1
+        }))
+
+        loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+        gaps = loop._read_gaps()
+        assert gaps == []
+
+    def test_read_feedback_when_file_missing(self, tmp_path):
+        """_read_feedback should return None when feedback.json doesn't exist"""
+        from src.features.feedback_loop import FeedbackLoop
+
+        loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+
+        # No feedback file
+        feedback = loop._read_feedback()
+        assert feedback is None
+
+    def test_read_result_when_file_missing(self, tmp_path):
+        """_read_result should return empty string when result.json doesn't exist"""
+        from src.features.feedback_loop import FeedbackLoop
+
+        loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+
+        # No result file
+        result = loop._read_result()
+        assert result == ""
+
+    def test_execute_worker_with_feedback_when_no_feedback(self, tmp_path):
+        """_execute_worker_with_feedback should pass (do nothing) when no feedback exists"""
+        from src.features.feedback_loop import FeedbackLoop
+
+        # Setup instructions
+        instructions_file = tmp_path / "instructions.json"
+        instructions_file.write_text(json.dumps({
+            "instructions": "Test",
+            "output_path": "result.json"
+        }))
+
+        with patch('src.features.feedback_loop.WorkerExecution') as MockWorker:
+            mock_worker = MockWorker.return_value
+
+            loop = FeedbackLoop(pod_dir=tmp_path, pod_id="test-pod-001")
+
+            # No feedback file exists
+            loop._execute_worker_with_feedback()
+
+            # Worker should not be called when no feedback
+            assert not mock_worker.execute_with_feedback.called
+            assert not mock_worker.execute.called
