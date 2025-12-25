@@ -615,3 +615,152 @@ class TestWorkerExecutionIntegration:
         assert mock_llm.call_count == 2
         status = worker.check_completion()
         assert status == "COMPLETE"
+
+
+class TestWorkerExecutionCoverage:
+    """Tests to achieve 100% coverage of edge cases and uncovered paths"""
+
+    def test_check_completion_returns_in_progress_when_no_feedback(self, tmp_path):
+        """check_completion() returns IN_PROGRESS when no feedback exists"""
+        # Arrange
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path)
+
+        # Act
+        status = worker.check_completion()
+
+        # Assert
+        assert status == "IN_PROGRESS"
+
+    def test_check_completion_returns_in_progress_when_fail_feedback(self, tmp_path):
+        """check_completion() returns IN_PROGRESS when feedback is FAIL"""
+        # Arrange
+        feedback_file = tmp_path / "feedback.json"
+        feedback_file.write_text(json.dumps({"status": "FAIL", "gaps": ["X"], "attempt": 1}))
+
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path)
+
+        # Act
+        status = worker.check_completion()
+
+        # Assert
+        assert status == "IN_PROGRESS"
+
+    def test_run_handles_max_retries_exceeded(self, tmp_path):
+        """run() sets status to MAX_RETRIES_EXCEEDED when limit reached"""
+        # Arrange
+        instructions_file = tmp_path / "instructions.json"
+        instructions_file.write_text(json.dumps({
+            "instructions": "Task",
+            "output_path": "result.json"
+        }))
+
+        feedback_file = tmp_path / "feedback.json"
+        feedback_file.write_text(json.dumps({
+            "status": "FAIL",
+            "gaps": ["Issue"],
+            "attempt": 5  # At max retries
+        }))
+
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path, max_retries=5)
+
+        # Act
+        worker.run()
+
+        # Assert
+        assert worker.execution_status == "MAX_RETRIES_EXCEEDED"
+
+    def test_run_marks_complete_when_pass_feedback_exists(self, tmp_path):
+        """run() sets status to COMPLETE when PASS feedback exists"""
+        # Arrange
+        instructions_file = tmp_path / "instructions.json"
+        instructions_file.write_text(json.dumps({
+            "instructions": "Task",
+            "output_path": "result.json"
+        }))
+
+        feedback_file = tmp_path / "feedback.json"
+        feedback_file.write_text(json.dumps({
+            "status": "PASS",
+            "result": "Success",
+            "attempts": 1
+        }))
+
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path)
+
+        # Act
+        worker.run()
+
+        # Assert
+        assert worker.execution_status == "COMPLETE"
+
+    def test_wait_for_instructions_returns_instructions_when_file_exists(self, tmp_path):
+        """wait_for_instructions() returns instructions when file exists"""
+        # Arrange
+        instructions_file = tmp_path / "instructions.json"
+        instructions_data = {
+            "instructions": "Process this",
+            "output_path": "result.json"
+        }
+        instructions_file.write_text(json.dumps(instructions_data))
+
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path)
+
+        # Act
+        result = worker.wait_for_instructions(timeout=1.0)
+
+        # Assert
+        assert result is not None
+        assert result["instructions"] == "Process this"
+
+    def test_clear_state_resets_execution_state(self, tmp_path):
+        """clear_state() resets execution status and history to initial values"""
+        # Arrange
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path)
+
+        # Modify state
+        worker.execution_status = "RUNNING"
+        worker.execution_history = [{"attempt": 1, "result": "X"}]
+
+        # Act
+        worker.clear_state()
+
+        # Assert
+        assert worker.execution_status == "idle"
+        assert worker.execution_history == []
+
+    def test_should_retry_returns_false_when_no_feedback(self, tmp_path):
+        """should_retry() returns False when no feedback exists"""
+        # Arrange
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path)
+
+        # Act
+        result = worker.should_retry()
+
+        # Assert
+        assert result is False
+
+    def test_should_retry_returns_false_when_feedback_is_pass(self, tmp_path):
+        """should_retry() returns False when feedback status is PASS"""
+        # Arrange
+        feedback_file = tmp_path / "feedback.json"
+        feedback_file.write_text(json.dumps({
+            "status": "PASS",
+            "result": "Success",
+            "attempts": 1
+        }))
+
+        from src.features.worker_execution import WorkerExecution
+        worker = WorkerExecution(working_dir=tmp_path)
+
+        # Act
+        result = worker.should_retry()
+
+        # Assert
+        assert result is False
