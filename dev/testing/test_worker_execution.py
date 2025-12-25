@@ -286,11 +286,11 @@ class TestWorkerExecutionFeedbackHandling:
         mock_llm = Mock(return_value={"result": "Retry result"})
         worker._call_llm = mock_llm
 
-        # Act
+        # Act - run() with existing FAIL feedback should retry
         worker.run()
 
-        # Assert - Should call LLM with gap context
-        assert mock_llm.call_count >= 2  # Original + retry
+        # Assert - Should call LLM once for retry (feedback already exists from previous attempt)
+        assert mock_llm.call_count == 1  # Retry only (original execution already happened)
 
     def test_includes_gaps_in_retry_context(self, tmp_path):
         """Worker includes gap information when retrying after FAIL."""
